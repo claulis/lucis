@@ -37,3 +37,12 @@ Em *Settings → Secrets and variables → Actions*, crie:
 | `LUCIS_KEY_PASSWORD` | senha da chave |
 
 Guarde o `.jks` e as senhas fora do repositório.
+
+## Lançar uma versão
+
+```bash
+git tag v1.0.1
+git push origin v1.0.1
+```
+
+O workflow gera o APK e o AAB assinados e cria o release em *Releases* com os dois arquivos. A tag vira o `versionName` do app.

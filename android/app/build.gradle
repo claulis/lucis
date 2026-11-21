@@ -9,7 +9,8 @@ android {
         targetSdkVersion rootProject.ext.targetSdkVersion
         // ponytail: versionCode = nº do build no GitHub Actions (sempre cresce, exigência da Play)
         versionCode((System.getenv("GITHUB_RUN_NUMBER") ?: "1").toInteger())
-        versionName "1.0"
+        // versionName vem da tag (v1.0.0 -> 1.0.0)
+        versionName((System.getenv("LUCIS_VERSION") ?: "v1.0.0").replaceFirst("^v", ""))
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.

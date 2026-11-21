@@ -3,11 +3,14 @@ name: Android
 on:
   push:
     branches: [main]
+    tags: ['v*']
   workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -35,11 +38,23 @@ jobs:
           LUCIS_KEYSTORE_PASSWORD: ${{ secrets.LUCIS_KEYSTORE_PASSWORD }}
           LUCIS_KEY_ALIAS: ${{ secrets.LUCIS_KEY_ALIAS }}
           LUCIS_KEY_PASSWORD: ${{ secrets.LUCIS_KEY_PASSWORD }}
-        run: ./gradlew assembleDebug bundleRelease
+          LUCIS_VERSION: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || '' }}
+        run: ./gradlew assembleDebug assembleRelease bundleRelease
 
       - uses: actions/upload-artifact@v4
         with:
           name: lucis-${{ github.run_number }}
           path: |
             android/app/build/outputs/apk/debug/*.apk
+            android/app/build/outputs/apk/release/*.apk
             android/app/build/outputs/bundle/release/*.aab
+
+      - name: Publicar release (só em tags v*)
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cp android/app/build/outputs/apk/release/app-release.apk "lucis-${GITHUB_REF_NAME}.apk"
+          cp android/app/build/outputs/bundle/release/app-release.aab "lucis-${GITHUB_REF_NAME}.aab"
+          gh release create "$GITHUB_REF_NAME" "lucis-${GITHUB_REF_NAME}.apk" "lucis-${GITHUB_REF_NAME}.aab" \
+            --title "Lucis ${GITHUB_REF_NAME}" --generate-notes
