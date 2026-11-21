@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Lucis</string>
+    <string name="title_activity_main">Lucis</string>
+    <string name="package_name">br.com.claulis.lucis</string>
+    <string name="custom_url_scheme">br.com.claulis.lucis</string>
+</resources>

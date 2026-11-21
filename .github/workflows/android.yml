@@ -1,0 +1,45 @@
+name: Android
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - run: npm ci
+      - run: npx cap sync android
+
+      - name: Restaurar keystore
+        env:
+          KEYSTORE_B64: ${{ secrets.LUCIS_KEYSTORE_BASE64 }}
+        if: env.KEYSTORE_B64 != ''
+        run: |
+          echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/upload.jks"
+          echo "LUCIS_KEYSTORE=$RUNNER_TEMP/upload.jks" >> "$GITHUB_ENV"
+
+      - name: Build (APK de teste + AAB da Play Store)
+        working-directory: android
+        env:
+          LUCIS_KEYSTORE_PASSWORD: ${{ secrets.LUCIS_KEYSTORE_PASSWORD }}
+          LUCIS_KEY_ALIAS: ${{ secrets.LUCIS_KEY_ALIAS }}
+          LUCIS_KEY_PASSWORD: ${{ secrets.LUCIS_KEY_PASSWORD }}
+        run: ./gradlew assembleDebug bundleRelease
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: lucis-${{ github.run_number }}
+          path: |
+            android/app/build/outputs/apk/debug/*.apk
+            android/app/build/outputs/bundle/release/*.aab

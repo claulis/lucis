@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="pt-BR"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<title>Lucis</title>
+<style>
+html,body{margin:0;height:100%;height:100dvh;overflow:hidden;background:#070a1a;font-family:system-ui,sans-serif;color:#e8ecff;touch-action:none;user-select:none;-webkit-user-select:none;-webkit-tap-highlight-color:transparent}
+canvas{display:block}
+#hud{position:fixed;top:0;left:0;right:0;padding:calc(14px + env(safe-area-inset-top)) calc(18px + env(safe-area-inset-right)) 14px calc(18px + env(safe-area-inset-left));display:flex;justify-content:space-between;font-size:clamp(14px,2.2vmin,22px);opacity:.85;pointer-events:none}
+#msg{position:fixed;inset:0;padding:0 24px;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;pointer-events:none;transition:opacity .6s}
+#msg h1{font-weight:300;letter-spacing:.3em;font-size:clamp(32px,9vmin,72px);margin:0 0 10px}
+#msg p{opacity:.75;margin:4px;font-size:clamp(15px,2.6vmin,24px)}
+</style></head><body>
+<canvas id="c"></canvas>
+<div id="hud"><span id="lvl"></span><span id="goal"></span></div>
+<div id="msg"><h1>LUCIS</h1><p>Toque uma vez para soltar uma onda de luz.</p><p>Encadeie os orbes e ouça a melodia.</p></div>
+<script>
+// ponytail: plugins nativos via global do Capacitor, sem bundler; no navegador ficam undefined e o jogo segue igual
+const P=window.Capacitor&&Capacitor.Plugins||{};
+P.StatusBar&&P.StatusBar.hide().catch(()=>{});
+const buzz=()=>P.Haptics&&P.Haptics.impact({style:'LIGHT'}).catch(()=>{});
+const c=document.getElementById('c'),x=c.getContext('2d'),msg=document.getElementById('msg');
+let W,H,S=1,D=Math.min(devicePixelRatio||1,2);
+// ponytail: S = escala pelo menor lado (base 400px); K = densidade pela área da tela
+function rs(){W=innerWidth;H=innerHeight;S=Math.max(.8,Math.min(W,H)/400);c.width=W*D;c.height=H*D;x.setTransform(D,0,0,D,0,0);
+for(const o of orbs){o.x=Math.min(o.x,W);o.y=Math.min(o.y,H)}}
+addEventListener('resize',rs);
+let AC;const scale=[0,2,4,7,9,12,14,16,19,21,24];
+// pausa o som quando o app vai para segundo plano
+document.addEventListener('visibilitychange',()=>{if(AC)document.hidden?AC.suspend():AC.resume()});
+function note(i){if(!AC)return;const t=AC.currentTime,o=AC.createOscillator(),g=AC.createGain();
+o.type='sine';o.frequency.value=261.6*Math.pow(2,scale[i%scale.length]/12);
+g.gain.setValueAtTime(0,t);g.gain.linearRampToValueAtTime(.12,t+.02);g.gain.exponentialRampToValueAtTime(.001,t+1.8);
+o.connect(g).connect(AC.destination);o.start(t);o.stop(t+2)}
+let level=1,orbs=[],waves=[],parts=[],tapped=false,popped=0,need=0,state='start',best=1;
+try{best=+(localStorage.getItem('lucisBest')||1)}catch(e){}
+rs();
+function start(){const K=Math.max(.8,Math.min(2,W*H/(S*S*400*700)));const n=Math.round((8+level*3)*K);need=Math.min(n-1,Math.ceil(n*(.25+level*.04)));orbs=[];waves=[];popped=0;tapped=false;
+for(let i=0;i<n;i++){const a=Math.random()*6.28,s=.3+Math.random()*.5;
+orbs.push({x:Math.random()*W,y:Math.random()*H,vx:Math.cos(a)*s*S,vy:Math.sin(a)*s*S,r:7*S,h:(level*40+i*25)%360})}
+state='play';hud()}
+function hud(){document.getElementById('lvl').textContent='Nível '+level;document.getElementById('goal').textContent=popped+' / '+need}
+function boom(px,py,h,chain){waves.push({x:px,y:py,r:0,max:55*S,life:1,h,hold:0});
+for(let i=0;i<14;i++){const a=Math.random()*6.28,s=(1+Math.random()*2)*S;parts.push({x:px,y:py,vx:Math.cos(a)*s,vy:Math.sin(a)*s,l:1,h})}
+if(chain){note(popped-1);buzz()}}
+addEventListener('pointerdown',e=>{if(!AC)AC=new (window.AudioContext||webkitAudioContext)();
+if(state==='start'||state==='end'){msg.style.opacity=0;start();return}
+if(!tapped&&state==='play'){tapped=true;boom(e.clientX,e.clientY,200,false);note(0)}});
+function end(){state='end';const win=popped>=need;
+if(win){level++;best=Math.max(best,level);try{localStorage.setItem('lucisBest',best)}catch(e){}}
+msg.innerHTML=win?`<h1>✦</h1><p>${popped} orbes iluminados</p><p>Toque para o nível ${level}</p>`:`<h1>~</h1><p>${popped} de ${need}. Respire e tente de novo.</p><p>Melhor nível: ${best}</p>`;
+msg.style.opacity=1}
+function loop(){x.fillStyle='rgba(7,10,26,.28)';x.fillRect(0,0,W,H);x.globalCompositeOperation='lighter';
+for(const o of orbs){o.x+=o.vx;o.y+=o.vy;if(o.x<0||o.x>W)o.vx*=-1;if(o.y<0||o.y>H)o.vy*=-1;
+const g=x.createRadialGradient(o.x,o.y,0,o.x,o.y,o.r*3);g.addColorStop(0,`hsla(${o.h},90%,70%,.9)`);g.addColorStop(1,`hsla(${o.h},90%,50%,0)`);
+x.fillStyle=g;x.beginPath();x.arc(o.x,o.y,o.r*3,0,6.28);x.fill()}
+for(const w of waves){if(w.r<w.max)w.r+=2.2*S;else if(w.hold<60)w.hold++;else w.life-=.03;
+x.strokeStyle=`hsla(${w.h},90%,70%,${w.life*.8})`;x.lineWidth=2;x.beginPath();x.arc(w.x,w.y,w.r,0,6.28);x.stroke();
+x.fillStyle=`hsla(${w.h},90%,60%,${w.life*.12})`;x.fill();
+if(w.life>.5)for(let i=orbs.length-1;i>=0;i--){const o=orbs[i];if(Math.hypot(o.x-w.x,o.y-w.y)<w.r+o.r){orbs.splice(i,1);popped++;hud();boom(o.x,o.y,o.h,true)}}}
+waves=waves.filter(w=>w.life>0);
+for(const p of parts){p.x+=p.vx;p.y+=p.vy;p.vx*=.96;p.vy*=.96;p.l-=.02;x.fillStyle=`hsla(${p.h},90%,70%,${p.l})`;x.fillRect(p.x,p.y,2*S,2*S)}
+parts=parts.filter(p=>p.l>0);x.globalCompositeOperation='source-over';
+if(state==='play'&&tapped&&waves.length===0)end();
+requestAnimationFrame(loop)}loop();
+</script></body></html>
