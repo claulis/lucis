@@ -40,9 +40,8 @@ Guarde o `.jks` e as senhas fora do repositório.
 
 ## Lançar uma versão
 
-```bash
-git tag v1.0.1
-git push origin v1.0.1
-```
+1. Em *Releases → Draft a new release*, crie uma tag nova (ex.: `v1.0.1`) a partir da `main`.
+2. Clique em **Generate release notes** e depois em **Publish release**.
+3. Em ~4 minutos o workflow anexa ao release o `lucis-v1.0.1.apk` e o `lucis-v1.0.1.aab`, ambos assinados.
 
-O workflow gera o APK e o AAB assinados e cria o release em *Releases* com os dois arquivos. A tag vira o `versionName` do app.
+A tag vira o `versionName` do app.
