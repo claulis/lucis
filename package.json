@@ -1,10 +1,10 @@
 {
   "name": "lucis",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "description": "Lucis — jogo relaxante de reação em cadeia de luz",
   "scripts": {
     "sync": "cap sync android",
-    "test": "node test/update.js"
+    "test": "node test/update.js && node test/game.js"
   },
   "repository": {
     "type": "git",

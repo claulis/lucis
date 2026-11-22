@@ -74,10 +74,13 @@ function note(i){if(!AC)return;const t=AC.currentTime,o=AC.createOscillator(),g=
 o.type='sine';o.frequency.value=261.6*Math.pow(2,scale[i%scale.length]/12);
 g.gain.setValueAtTime(0,t);g.gain.linearRampToValueAtTime(.12,t+.02);g.gain.exponentialRampToValueAtTime(.001,t+1.8);
 o.connect(g).connect(AC.destination);o.start(t);o.stop(t+2)}
-let level=1,orbs=[],waves=[],parts=[],tapped=false,popped=0,need=0,total=0,chain=0,state='start',best=1;
+let waveMax=0,waveHold=0,level=1,orbs=[],waves=[],parts=[],tapped=false,popped=0,need=0,total=0,chain=0,state='start',best=1;
 try{best=+(localStorage.getItem('lucisBest')||1)}catch(e){}
 rs();
-function start(){const K=Math.max(.8,Math.min(2,W*H/(S*S*400*700)));const n=Math.round((8+level*3)*K);need=Math.min(n-1,Math.ceil(n*(.25+level*.04)));orbs=[];waves=[];popped=0;chain=0;total=n;tapped=false;
+function start(){const K=Math.max(.8,Math.min(2,W*H/(S*S*400*700)));// curva de dificuldade (simulada): ~85% de vitória no nível 1, ~40% no 8, ~15% no 12
+const n=Math.round((22+level)*K);need=Math.min(n-1,Math.ceil(n*Math.min(.7,.10+level*.035)));
+waveMax=Math.max(52,86-1.8*level)*S;waveHold=Math.max(60,160-5*level); // onda começa grande e longa e encolhe por nível
+orbs=[];waves=[];popped=0;chain=0;total=n;tapped=false;
 for(let i=0;i<n;i++){const a=Math.random()*6.28,s=.3+Math.random()*.5;
 orbs.push({x:Math.random()*W,y:Math.random()*H,vx:Math.cos(a)*s*S,vy:Math.sin(a)*s*S,r:7*S,h:(level*40+i*25)%360})}
 state='play';over.classList.remove('on');hud()}
@@ -86,7 +89,7 @@ const $=id=>document.getElementById(id),over=$('over'),fill=$('fill');
 function hud(){$('lvl').textContent='Nível '+level;$('bar').style.visibility='visible';
 $('mark').style.left=need/total*100+'%';fill.style.width=popped/total*100+'%';
 fill.classList.toggle('bonus',popped>need);fill.style.setProperty('--g',need/Math.max(popped,1)*100+'%')}
-function boom(px,py,h,isChain,d=0){waves.push({x:px,y:py,r:0,max:55*S,life:1,h,hold:0,d});chain=Math.max(chain,d);
+function boom(px,py,h,isChain,d=0){waves.push({x:px,y:py,r:0,max:waveMax,life:1,h,hold:0,d});chain=Math.max(chain,d);
 for(let i=0;i<14;i++){const a=Math.random()*6.28,s=(1+Math.random()*2)*S;parts.push({x:px,y:py,vx:Math.cos(a)*s,vy:Math.sin(a)*s,l:1,h})}
 if(isChain){note(popped-1);buzz()}}
 addEventListener('pointerdown',e=>{if(!AC)AC=new (window.AudioContext||webkitAudioContext)();
@@ -109,7 +112,7 @@ function loop(){x.fillStyle='#070a1a';x.fillRect(0,0,W,H);x.globalCompositeOpera
 for(const o of orbs){o.x+=o.vx;o.y+=o.vy;if(o.x<0||o.x>W)o.vx*=-1;if(o.y<0||o.y>H)o.vy*=-1;
 const g=x.createRadialGradient(o.x,o.y,0,o.x,o.y,o.r*3);g.addColorStop(0,`hsla(${o.h},90%,70%,.9)`);g.addColorStop(1,`hsla(${o.h},90%,50%,0)`);
 x.fillStyle=g;x.beginPath();x.arc(o.x,o.y,o.r*3,0,6.28);x.fill()}
-for(const w of waves){if(w.r<w.max)w.r+=2.2*S;else if(w.hold<60)w.hold++;else w.life-=.03;
+for(const w of waves){if(w.r<w.max)w.r+=2.2*S;else if(w.hold<waveHold)w.hold++;else w.life-=.03;
 x.strokeStyle=`hsla(${w.h},90%,70%,${w.life*.8})`;x.lineWidth=2;x.beginPath();x.arc(w.x,w.y,w.r,0,6.28);x.stroke();
 x.fillStyle=`hsla(${w.h},90%,60%,${w.life*.12})`;x.fill();
 if(w.life>.5)for(let i=orbs.length-1;i>=0;i--){const o=orbs[i];if(Math.hypot(o.x-w.x,o.y-w.y)<w.r+o.r){orbs.splice(i,1);popped++;hud();boom(o.x,o.y,o.h,true,w.d+1)}}}
