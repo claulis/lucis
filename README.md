@@ -40,6 +40,19 @@ Guarde o `.jks` e as senhas fora do repositório.
 
 ## Lançar uma versão
 
-Suba o `version` no `package.json` (ex.: `1.0.1`) e faça push na `main`. O workflow cria o release `v1.0.1` com o APK e o AAB assinados.
+1. Suba o `version` no `package.json` (ex.: `1.1.1`).
+2. **Mudou algo nativo?** (pasta `android/`, plugins, `capacitor.config.json`) Coloque `nativeSince` igual à nova versão.
+3. Faça push na `main`. O workflow cria o release `v1.1.1` com APK, AAB, `lucis-v1.1.1-web.zip` e `update.json`.
 
-Também dá para criar o release pela página *Releases*: o workflow anexa os arquivos a ele. A tag vira o `versionName` do app.
+A tag vira o `versionName` do app.
+
+## Atualização automática
+
+Ao abrir, o app lê `releases/latest/download/update.json` (o repositório precisa ser **público**).
+
+- **Só mudou o jogo** (`www/`): o app baixa o `.zip`, confere o SHA-256 e troca de versão sozinho. Na tela inicial a troca é imediata; no meio de uma partida, fica para a próxima abertura. A troca é transacional (via [`@capgo/capacitor-updater`](https://github.com/Cap-go/capacitor-updater)): se a versão nova não chamar `notifyAppReady()` em 10 s, o app volta para a anterior e não tenta aquela versão de novo.
+- **Mudou algo nativo** (`nativeSince` maior que o APK instalado): aparece o botão *Atualizar*, que baixa o APK novo; o Android só instala se ele tiver a mesma assinatura.
+
+Sem servidor da Capgo e sem telemetria: `statsUrl`, `updateUrl` e `channelUrl` vazios em `capacitor.config.json`.
+
+Teste da lógica: `npx -y -p playwright npm test`.

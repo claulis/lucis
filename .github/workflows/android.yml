@@ -59,11 +59,22 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           V="$LUCIS_VERSION"
+          BASE="https://github.com/$GITHUB_REPOSITORY/releases/download/$V"
           cp android/app/build/outputs/apk/release/app-release.apk "lucis-$V.apk"
           cp android/app/build/outputs/bundle/release/app-release.aab "lucis-$V.aab"
+          (cd www && zip -qr "../lucis-$V-web.zip" .)
+          # manifesto lido pelo app: versão, desde quando exige APK novo e o SHA-256 do pacote do jogo
+          node -e '
+            const fs=require("fs"),crypto=require("crypto"),[V,BASE]=process.argv.slice(1),pkg=require("./package.json");
+            const sha=f=>crypto.createHash("sha256").update(fs.readFileSync(f)).digest("hex");
+            fs.writeFileSync("update.json",JSON.stringify({version:V.replace(/^[vV]/,""),nativeSince:pkg.nativeSince,
+              web:{url:`${BASE}/lucis-${V}-web.zip`,sha256:sha(`lucis-${V}-web.zip`)},
+              apk:{url:`${BASE}/lucis-${V}.apk`,sha256:sha(`lucis-${V}.apk`)}},null,2))' "$V" "$BASE"
+          cat update.json
+          FILES="lucis-$V.apk lucis-$V.aab lucis-$V-web.zip update.json"
           if [ "$GITHUB_EVENT_NAME" = release ]; then
-            gh release upload "$V" "lucis-$V.apk" "lucis-$V.aab" --clobber
+            gh release upload "$V" $FILES --clobber
           elif ! gh release view "$V" >/dev/null 2>&1; then
-            # versão nova no package.json -> cria o release (já com os arquivos)
-            gh release create "$V" "lucis-$V.apk" "lucis-$V.aab" --target "$GITHUB_SHA" --title "Lucis $V" --generate-notes
+            # versão nova no package.json -> cria o release já com todos os arquivos (publicação atômica)
+            gh release create "$V" $FILES --target "$GITHUB_SHA" --title "Lucis $V" --generate-notes
           fi

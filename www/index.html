@@ -8,16 +8,40 @@ html,body{margin:0;height:100%;height:100dvh;overflow:hidden;background:#070a1a;
 canvas{display:block}
 #hud{position:fixed;top:0;left:0;right:0;padding:calc(14px + var(--st)) calc(18px + var(--sr)) 14px calc(18px + var(--sl));display:flex;justify-content:space-between;font-size:clamp(14px,2.2vmin,22px);opacity:.85;pointer-events:none}
 #msg{position:fixed;inset:0;padding:var(--st) calc(24px + var(--sr)) var(--sb) calc(24px + var(--sl));display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;pointer-events:none;transition:opacity .6s}
+#upd{position:fixed;left:50%;bottom:calc(24px + var(--sb));transform:translateX(-50%);display:none;padding:12px 22px;border:1px solid #6fb8ff;border-radius:24px;background:#0d1733;color:#e8ecff;font:inherit;font-size:15px}
 #msg h1{font-weight:300;letter-spacing:.3em;font-size:clamp(32px,9vmin,72px);margin:0 0 10px}
 #msg p{opacity:.75;margin:4px;font-size:clamp(15px,2.6vmin,24px)}
 </style></head><body>
 <canvas id="c"></canvas>
+<button id="upd"></button>
 <div id="hud"><span id="lvl"></span><span id="goal"></span></div>
 <div id="msg"><h1>LUCIS</h1><p>Toque uma vez para soltar uma onda de luz.</p><p>Encadeie os orbes e ouça a melodia.</p></div>
 <script>
 // ponytail: plugins nativos via global do Capacitor, sem bundler; no navegador ficam undefined e o jogo segue igual
 const P=window.Capacitor&&Capacitor.Plugins||{};
 P.StatusBar&&P.StatusBar.hide().catch(()=>{});
+// ---- atualização automática ----
+// conteúdo do jogo (zip): baixa, confere SHA-256 e troca de forma atômica pelo capacitor-updater;
+// se a versão nova não chamar notifyAppReady() em 10 s, o plugin volta sozinho para a anterior.
+// mudança nativa (APK): só o instalador do Android pode trocar o app -> mostra o botão "Atualizar".
+const MANIFEST='https://github.com/claulis/lucis/releases/latest/download/update.json';
+const U=P.CapacitorUpdater;
+const cmp=(a,b)=>{a=a.split('.').map(Number);b=b.split('.').map(Number);for(let i=0;i<3;i++)if((a[i]||0)!==(b[i]||0))return (a[i]||0)-(b[i]||0);return 0};
+async function checkUpdate(){
+  const r=await P.CapacitorHttp.get({url:MANIFEST,headers:{'Cache-Control':'no-cache'}});
+  if(r.status!==200)return;
+  const m=typeof r.data==='string'?JSON.parse(r.data):r.data;
+  const builtin=(await U.getBuiltinVersion()).version,cur=(await U.current()).bundle;
+  const running=cur.id==='builtin'?builtin:cur.version;
+  if(cmp(m.version,running)<=0)return;
+  if(cmp(builtin,m.nativeSince)<0){ // APK instalado é velho demais para este conteúdo
+    const b=document.getElementById('upd');b.textContent='Atualizar para '+m.version;b.style.display='block';
+    b.onpointerdown=e=>e.stopPropagation();b.onclick=()=>{location.href=m.apk.url};return}
+  const bad=(await U.list()).bundles.some(x=>x.version===m.version&&x.status==='error');
+  if(bad)return; // essa versão já falhou e foi revertida: não tenta de novo
+  const nb=await U.download({url:m.web.url,version:m.version,checksum:m.web.sha256});
+  if(state==='start')await U.set({id:nb.id});else await U.next({id:nb.id}); // no meio da partida, aplica na próxima abertura
+}
 const buzz=()=>P.Haptics&&P.Haptics.impact({style:'LIGHT'}).catch(()=>{});
 const c=document.getElementById('c'),x=c.getContext('2d'),msg=document.getElementById('msg');
 let W,H,S=1,D=Math.min(devicePixelRatio||1,2);
@@ -63,4 +87,6 @@ for(const p of parts){p.x+=p.vx;p.y+=p.vy;p.vx*=.96;p.vy*=.96;p.l-=.02;x.fillSty
 parts=parts.filter(p=>p.l>0);x.globalCompositeOperation='source-over';
 if(state==='play'&&tapped&&waves.length===0)end();
 requestAnimationFrame(loop)}loop();
+// só confirma que esta versão está saudável depois que o jogo iniciou sem erro
+if(U){U.notifyAppReady().catch(()=>{});checkUpdate().catch(()=>{})}
 </script></body></html>
