@@ -23,6 +23,10 @@ jobs:
           distribution: temurin
           java-version: 21
       - run: npm ci
+      - name: Versão (tag do release ou package.json)
+        run: |
+          if [ "$GITHUB_EVENT_NAME" = release ]; then V="$GITHUB_REF_NAME"; else V="v$(node -p "require('./package.json').version")"; fi
+          echo "LUCIS_VERSION=$V" >> "$GITHUB_ENV"
       - run: npx cap sync android
 
       - name: Restaurar keystore
@@ -39,7 +43,6 @@ jobs:
           LUCIS_KEYSTORE_PASSWORD: ${{ secrets.LUCIS_KEYSTORE_PASSWORD }}
           LUCIS_KEY_ALIAS: ${{ secrets.LUCIS_KEY_ALIAS }}
           LUCIS_KEY_PASSWORD: ${{ secrets.LUCIS_KEY_PASSWORD }}
-          LUCIS_VERSION: ${{ github.event_name == 'release' && github.ref_name || '' }}
         run: ./gradlew assembleDebug assembleRelease bundleRelease
 
       - uses: actions/upload-artifact@v4
@@ -50,11 +53,17 @@ jobs:
             android/app/build/outputs/apk/release/*.apk
             android/app/build/outputs/bundle/release/*.aab
 
-      - name: Anexar APK e AAB ao release
-        if: github.event_name == 'release'
+      - name: Publicar no release
+        if: github.event_name == 'release' || github.ref == 'refs/heads/main'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          cp android/app/build/outputs/apk/release/app-release.apk "lucis-${GITHUB_REF_NAME}.apk"
-          cp android/app/build/outputs/bundle/release/app-release.aab "lucis-${GITHUB_REF_NAME}.aab"
-          gh release upload "$GITHUB_REF_NAME" "lucis-${GITHUB_REF_NAME}.apk" "lucis-${GITHUB_REF_NAME}.aab" --clobber
+          V="$LUCIS_VERSION"
+          cp android/app/build/outputs/apk/release/app-release.apk "lucis-$V.apk"
+          cp android/app/build/outputs/bundle/release/app-release.aab "lucis-$V.aab"
+          if [ "$GITHUB_EVENT_NAME" = release ]; then
+            gh release upload "$V" "lucis-$V.apk" "lucis-$V.aab" --clobber
+          elif ! gh release view "$V" >/dev/null 2>&1; then
+            # versão nova no package.json -> cria o release (já com os arquivos)
+            gh release create "$V" "lucis-$V.apk" "lucis-$V.aab" --target "$GITHUB_SHA" --title "Lucis $V" --generate-notes
+          fi
