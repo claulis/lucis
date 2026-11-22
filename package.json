@@ -1,6 +1,6 @@
 {
   "name": "lucis",
-  "version": "1.1.2",
+  "version": "1.2.0",
   "description": "Lucis — jogo relaxante de reação em cadeia de luz",
   "scripts": {
     "sync": "cap sync android",

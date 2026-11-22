@@ -6,7 +6,24 @@
 html{--st:var(--safe-area-inset-top,env(safe-area-inset-top,0px));--sr:var(--safe-area-inset-right,env(safe-area-inset-right,0px));--sb:var(--safe-area-inset-bottom,env(safe-area-inset-bottom,0px));--sl:var(--safe-area-inset-left,env(safe-area-inset-left,0px))}
 html,body{margin:0;height:100%;height:100dvh;overflow:hidden;background:#070a1a;font-family:system-ui,sans-serif;color:#e8ecff;touch-action:none;user-select:none;-webkit-user-select:none;-webkit-tap-highlight-color:transparent}
 canvas{display:block}
-#hud{position:fixed;top:0;left:0;right:0;padding:calc(14px + var(--st)) calc(18px + var(--sr)) 14px calc(18px + var(--sl));display:flex;justify-content:space-between;font-size:clamp(14px,2.2vmin,22px);opacity:.85;pointer-events:none}
+#hud{position:fixed;top:0;left:0;right:0;padding:calc(14px + var(--st)) calc(18px + var(--sr)) 14px calc(18px + var(--sl));font-size:clamp(14px,2.2vmin,22px);pointer-events:none}
+#lvl{opacity:.85}
+#bar{position:relative;height:6px;margin-top:10px;border-radius:3px;background:#ffffff14;visibility:hidden}
+#fill{width:0;height:100%;border-radius:3px;background:linear-gradient(90deg,#6fb8ff,#c58bff);box-shadow:0 0 8px #8fb8ff;transition:width .35s ease-out}
+#fill.bonus{background:linear-gradient(90deg,#6fb8ff 0,#c58bff var(--g),#ffd36f var(--g),#ffb347);box-shadow:0 0 10px #ffd36f}
+#mark{position:absolute;top:-4px;width:2px;height:14px;margin-left:-1px;border-radius:1px;background:#e8ecff}
+#over{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;padding:var(--st) calc(20px + var(--sr)) var(--sb) calc(20px + var(--sl));background:#070a1acc;-webkit-backdrop-filter:blur(3px);backdrop-filter:blur(3px);opacity:0;visibility:hidden;transition:opacity .5s,visibility .5s}
+#over.on{opacity:1;visibility:visible}
+.card{width:100%;max-width:340px;box-sizing:border-box;padding:26px 20px;text-align:center;background:#101833ee;border:1px solid #ffffff1c;border-radius:22px;box-shadow:0 0 40px #6fb8ff33;transform:translateY(12px);transition:transform .5s}
+#over.on .card{transform:none}
+.k{font-size:12px;letter-spacing:.25em;opacity:.6}
+.h{font-size:clamp(26px,8vmin,34px);font-weight:300;letter-spacing:.12em;margin:6px 0 16px}
+.stars{font-size:30px;letter-spacing:8px;margin-bottom:14px;color:#ffd36f;text-shadow:0 0 12px #ffd36f}.stars .off{color:#ffffff26;text-shadow:none}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:20px}.stats b{display:block;font-size:22px;font-weight:500}.stats span{font-size:11px;opacity:.6}.gold{color:#ffd36f}
+.q{font-size:15px;opacity:.75;margin:-6px 0 18px}
+.btn{display:block;width:100%;padding:15px 0;border:0;border-radius:30px;font:600 16px system-ui,sans-serif;color:#070a1a;background:linear-gradient(90deg,#6fb8ff,#c58bff);box-shadow:0 0 18px #8fb8ff88}
+.btn:active{transform:scale(.97)}
+.btn2{display:block;width:100%;margin-top:10px;padding:12px 0;border:0;background:none;color:#e8ecffaa;font:15px system-ui,sans-serif}
 #msg{position:fixed;inset:0;padding:var(--st) calc(24px + var(--sr)) var(--sb) calc(24px + var(--sl));display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;pointer-events:none;transition:opacity .6s}
 #upd{position:fixed;left:50%;bottom:calc(24px + var(--sb));transform:translateX(-50%);display:none;padding:12px 22px;border:1px solid #6fb8ff;border-radius:24px;background:#0d1733;color:#e8ecff;font:inherit;font-size:15px}
 #msg h1{font-weight:300;letter-spacing:.3em;font-size:clamp(32px,9vmin,72px);margin:0 0 10px}
@@ -14,7 +31,8 @@ canvas{display:block}
 </style></head><body>
 <canvas id="c"></canvas>
 <button id="upd"></button>
-<div id="hud"><span id="lvl"></span><span id="goal"></span></div>
+<div id="hud"><span id="lvl"></span><div id="bar"><div id="fill"></div><i id="mark"></i></div></div>
+<div id="over"><div class="card" id="card"></div></div>
 <div id="msg"><h1>LUCIS</h1><p>Toque uma vez para soltar uma onda de luz.</p><p>Encadeie os orbes e ouça a melodia.</p></div>
 <script>
 // ponytail: plugins nativos via global do Capacitor, sem bundler; no navegador ficam undefined e o jogo segue igual
@@ -56,24 +74,37 @@ function note(i){if(!AC)return;const t=AC.currentTime,o=AC.createOscillator(),g=
 o.type='sine';o.frequency.value=261.6*Math.pow(2,scale[i%scale.length]/12);
 g.gain.setValueAtTime(0,t);g.gain.linearRampToValueAtTime(.12,t+.02);g.gain.exponentialRampToValueAtTime(.001,t+1.8);
 o.connect(g).connect(AC.destination);o.start(t);o.stop(t+2)}
-let level=1,orbs=[],waves=[],parts=[],tapped=false,popped=0,need=0,state='start',best=1;
+let level=1,orbs=[],waves=[],parts=[],tapped=false,popped=0,need=0,total=0,chain=0,state='start',best=1;
 try{best=+(localStorage.getItem('lucisBest')||1)}catch(e){}
 rs();
-function start(){const K=Math.max(.8,Math.min(2,W*H/(S*S*400*700)));const n=Math.round((8+level*3)*K);need=Math.min(n-1,Math.ceil(n*(.25+level*.04)));orbs=[];waves=[];popped=0;tapped=false;
+function start(){const K=Math.max(.8,Math.min(2,W*H/(S*S*400*700)));const n=Math.round((8+level*3)*K);need=Math.min(n-1,Math.ceil(n*(.25+level*.04)));orbs=[];waves=[];popped=0;chain=0;total=n;tapped=false;
 for(let i=0;i<n;i++){const a=Math.random()*6.28,s=.3+Math.random()*.5;
 orbs.push({x:Math.random()*W,y:Math.random()*H,vx:Math.cos(a)*s*S,vy:Math.sin(a)*s*S,r:7*S,h:(level*40+i*25)%360})}
-state='play';hud()}
-function hud(){document.getElementById('lvl').textContent='Nível '+level;document.getElementById('goal').textContent=popped+' / '+need}
-function boom(px,py,h,chain){waves.push({x:px,y:py,r:0,max:55*S,life:1,h,hold:0});
+state='play';over.classList.remove('on');hud()}
+const $=id=>document.getElementById(id),over=$('over'),fill=$('fill');
+// barra B: mede todos os orbes; o traço é a meta; o que passa dela fica dourado
+function hud(){$('lvl').textContent='Nível '+level;$('bar').style.visibility='visible';
+$('mark').style.left=need/total*100+'%';fill.style.width=popped/total*100+'%';
+fill.classList.toggle('bonus',popped>need);fill.style.setProperty('--g',need/Math.max(popped,1)*100+'%')}
+function boom(px,py,h,isChain,d=0){waves.push({x:px,y:py,r:0,max:55*S,life:1,h,hold:0,d});chain=Math.max(chain,d);
 for(let i=0;i<14;i++){const a=Math.random()*6.28,s=(1+Math.random()*2)*S;parts.push({x:px,y:py,vx:Math.cos(a)*s,vy:Math.sin(a)*s,l:1,h})}
-if(chain){note(popped-1);buzz()}}
+if(isChain){note(popped-1);buzz()}}
 addEventListener('pointerdown',e=>{if(!AC)AC=new (window.AudioContext||webkitAudioContext)();
-if(state==='start'||state==='end'){msg.style.opacity=0;start();return}
+if(e.target.closest('button'))return;
+if(state==='start'){msg.style.opacity=0;start();return}
 if(!tapped&&state==='play'){tapped=true;boom(e.clientX,e.clientY,200,false);note(0)}});
 function end(){state='end';const win=popped>=need;
-if(win){level++;best=Math.max(best,level);try{localStorage.setItem('lucisBest',best)}catch(e){}}
-msg.innerHTML=win?`<h1>✦</h1><p>${popped} orbes iluminados</p><p>Toque para o nível ${level}</p>`:`<h1>~</h1><p>${popped} de ${need}. Respire e tente de novo.</p><p>Melhor nível: ${best}</p>`;
-msg.style.opacity=1}
+if(win){best=Math.max(best,level+1);try{localStorage.setItem('lucisBest',best)}catch(e){}}
+// estrelas: meta = 1, 50% acima da meta = 2, todos os orbes = 3
+const st=popped>=total?3:popped>=Math.ceil(need*1.5)?2:1;
+$('card').innerHTML=win?`<div class=k>FASE ${level}</div><div class=h>Completa</div>
+<div class=stars>${'★'.repeat(st)}<span class=off>${'★'.repeat(3-st)}</span></div>
+<div class=stats><div><b>${popped}</b><span>orbes</span></div><div><b class=gold>+${popped-need}</b><span>bônus</span></div><div><b>${chain}</b><span>maior cadeia</span></div></div>
+<button class=btn id=next>Próxima fase →</button><button class=btn2 id=again>↻ Jogar de novo</button>`
+:`<div class=k>FASE ${level}</div><div class=h>Quase lá</div><p class=q>${popped} de ${need} orbes. Respire e tente de novo.</p><button class=btn id=again>↻ Tentar de novo</button>`;
+if(win)$('next').onclick=()=>{level++;start()};
+$('again').onclick=start;
+over.classList.add('on')}
 function loop(){x.fillStyle='#070a1a';x.fillRect(0,0,W,H);x.globalCompositeOperation='lighter';
 for(const o of orbs){o.x+=o.vx;o.y+=o.vy;if(o.x<0||o.x>W)o.vx*=-1;if(o.y<0||o.y>H)o.vy*=-1;
 const g=x.createRadialGradient(o.x,o.y,0,o.x,o.y,o.r*3);g.addColorStop(0,`hsla(${o.h},90%,70%,.9)`);g.addColorStop(1,`hsla(${o.h},90%,50%,0)`);
@@ -81,7 +112,7 @@ x.fillStyle=g;x.beginPath();x.arc(o.x,o.y,o.r*3,0,6.28);x.fill()}
 for(const w of waves){if(w.r<w.max)w.r+=2.2*S;else if(w.hold<60)w.hold++;else w.life-=.03;
 x.strokeStyle=`hsla(${w.h},90%,70%,${w.life*.8})`;x.lineWidth=2;x.beginPath();x.arc(w.x,w.y,w.r,0,6.28);x.stroke();
 x.fillStyle=`hsla(${w.h},90%,60%,${w.life*.12})`;x.fill();
-if(w.life>.5)for(let i=orbs.length-1;i>=0;i--){const o=orbs[i];if(Math.hypot(o.x-w.x,o.y-w.y)<w.r+o.r){orbs.splice(i,1);popped++;hud();boom(o.x,o.y,o.h,true)}}}
+if(w.life>.5)for(let i=orbs.length-1;i>=0;i--){const o=orbs[i];if(Math.hypot(o.x-w.x,o.y-w.y)<w.r+o.r){orbs.splice(i,1);popped++;hud();boom(o.x,o.y,o.h,true,w.d+1)}}}
 waves=waves.filter(w=>w.life>0);
 for(const p of parts){p.x+=p.vx;p.y+=p.vy;p.vx*=.96;p.vy*=.96;p.l-=.02;x.fillStyle=`hsla(${p.h},90%,70%,${p.l})`;x.fillRect(p.x,p.y,2*S,2*S)}
 parts=parts.filter(p=>p.l>0);x.globalCompositeOperation='source-over';
