@@ -30,15 +30,29 @@ canvas{display:block}
 #vbar{height:3px;margin:6px auto 0;max-width:260px;border-radius:2px;background:#ffffff14;display:none}
 #vfill{width:0;height:100%;border-radius:2px;background:linear-gradient(90deg,#6fb8ff,#c58bff);box-shadow:0 0 6px #8fb8ff;transition:width .3s}
 #upd{position:fixed;left:50%;bottom:calc(52px + var(--sb));transform:translateX(-50%);display:none;padding:12px 22px;border:1px solid #6fb8ff;border-radius:24px;background:#0d1733;color:#e8ecff;font:inherit;font-size:15px}
+#hud .row{display:flex;justify-content:space-between;align-items:baseline}
+.coin{color:#ffd36f;font-weight:600}
+#msg .btn,#msg .btn2,#msg .pill{pointer-events:auto}
+#home{width:100%;max-width:320px}#msg .btn{margin-top:22px}#msg .btn small{display:block;font-weight:500;font-size:12px;opacity:.75}
+.pill{display:inline-block;margin-top:16px;padding:6px 14px;border-radius:20px;background:#ffd36f1a;border:1px solid #ffd36f55;font-size:14px}
+#hint{position:fixed;left:0;right:0;top:46%;text-align:center;font-size:14px;opacity:.55;pointer-events:none;display:none}
+#tray{position:fixed;left:calc(12px + var(--sl));right:calc(12px + var(--sr));bottom:calc(14px + var(--sb));display:none;gap:8px;max-width:420px;margin:0 auto}
+.it{flex:1;padding:10px 4px 8px;border-radius:14px;background:#101833ee;border:1px solid #ffffff1c;color:#e8ecff;font:12px system-ui,sans-serif;text-align:center}
+.it .e{font-size:22px;display:block;margin-bottom:2px}.it .p{display:block;margin-top:3px;color:#ffd36f;font-weight:600}
+.it.on{border-color:#7dffb0;box-shadow:0 0 14px #7dffb066;background:#12302aee}.it.on .p{color:#7dffb0}
+.it.off{opacity:.35}
+.rew{margin:0 0 18px;padding:10px;border-radius:12px;background:#ffd36f14;border:1px solid #ffd36f44;font-size:13px}.rew b{font-size:20px;color:#ffd36f}.rew div{opacity:.7;font-size:11.5px;margin-top:2px}
 #msg h1{font-weight:300;letter-spacing:.3em;font-size:clamp(32px,9vmin,72px);margin:0 0 10px}
 #msg p{opacity:.75;margin:4px;font-size:clamp(15px,2.6vmin,24px)}
 </style></head><body>
 <canvas id="c"></canvas>
 <button id="upd"></button>
 <div id="ver"><span id="vtxt"></span><div id="vbar"><div id="vfill"></div></div></div>
-<div id="hud"><span id="lvl"></span><div id="bar"><div id="fill"></div><i id="mark"></i></div></div>
+<div id="hud"><div class="row"><span id="lvl"></span><span class="coin" id="coins"></span></div><div id="bar"><div id="fill"></div><i id="mark"></i></div></div>
 <div id="over"><div class="card" id="card"></div></div>
-<div id="msg"><h1>LUCIS</h1><p>Toque uma vez para soltar uma onda de luz.</p><p>Encadeie os orbes e ouça a melodia.</p></div>
+<div id="hint"></div>
+<div id="tray"></div>
+<div id="msg"><h1>LUCIS</h1><p>Toque uma vez para soltar uma onda de luz.</p><p>Encadeie os orbes e ouça a melodia.</p><div id="home"></div></div>
 <script>
 // ponytail: plugins nativos via global do Capacitor, sem bundler; no navegador ficam undefined e o jogo segue igual
 const P=window.Capacitor&&Capacitor.Plugins||{};
@@ -88,40 +102,69 @@ function note(i){if(!AC)return;const t=AC.currentTime,o=AC.createOscillator(),g=
 o.type='sine';o.frequency.value=261.6*Math.pow(2,scale[i%scale.length]/12);
 g.gain.setValueAtTime(0,t);g.gain.linearRampToValueAtTime(.12,t+.02);g.gain.exponentialRampToValueAtTime(.001,t+1.8);
 o.connect(g).connect(AC.destination);o.start(t);o.stop(t+2)}
-let waveMax=0,waveHold=0,level=1,orbs=[],waves=[],parts=[],tapped=false,popped=0,need=0,total=0,chain=0,state='start',best=1;
-try{best=+(localStorage.getItem('lucisBest')||1)}catch(e){}
+let waveMax=0,waveHold=0,level=1,orbs=[],waves=[],parts=[],tapped=false,taps=0,popped=0,need=0,total=0,chain=0,state='start',active={};
+// progresso salvo no aparelho: nível liberado, melhores estrelas por fase e saldo de Lumes (✦)
+let save={best:1,stars:{},coins:0};
+try{save=Object.assign(save,JSON.parse(localStorage.getItem('lucis')||'{}'));save.best=Math.max(save.best,+(localStorage.getItem('lucisBest')||1))}catch(e){}
+const persist=()=>{try{localStorage.setItem('lucis',JSON.stringify(save))}catch(e){}};
+const starSum=()=>Object.values(save.stars).reduce((a,b)=>a+b,0);
+// itens de facilidade: valem só na fase em que foram comprados (gastos mesmo se perder)
+const ITEMS={ampla:{e:'🌊',n:'Onda Ampla',p:15},eco:{e:'⏳',n:'Eco Longo',p:15},toque:{e:'✋',n:'Segundo Toque',p:30}};
 rs();
-function start(){const K=Math.max(.8,Math.min(2,W*H/(S*S*400*700)));// curva de dificuldade (simulada): ~85% de vitória no nível 1, ~40% no 8, ~15% no 12
-const n=Math.round((22+level)*K);need=Math.min(n-1,Math.ceil(n*Math.min(.7,.10+level*.035)));
-waveMax=Math.max(52,86-1.8*level)*S;waveHold=Math.max(60,160-5*level); // onda começa grande e longa e encolhe por nível
-orbs=[];waves=[];popped=0;chain=0;total=n;tapped=false;
+function start(){const K=Math.max(.8,Math.min(2,W*H/(S*S*400*700)));
+// curva simulada: vitória ~84% no nível 1, ~67% no 5, ~46% no 10, ~30% no 20, ~20% no 30
+const l=Math.min(level,10),e=Math.max(0,level-10);
+const n=Math.round((22+l)*K);need=Math.min(n-1,Math.ceil(n*Math.min(.6,.10+l*.028+e*.015)));
+waveMax=(86-1.2*l)*S;waveHold=160-4*l; // a onda encolhe até o nível 10 e depois fica fixa
+orbs=[];waves=[];popped=0;chain=0;total=n;tapped=false;taps=1;active={};
 for(let i=0;i<n;i++){const a=Math.random()*6.28,s=.3+Math.random()*.5;
 orbs.push({x:Math.random()*W,y:Math.random()*H,vx:Math.cos(a)*s*S,vy:Math.sin(a)*s*S,r:7*S,h:(level*40+i*25)%360})}
-state='play';over.classList.remove('on');document.getElementById('ver').classList.add('hide');hud()}
+state='play';over.classList.remove('on');document.getElementById('ver').classList.add('hide');msg.style.opacity=0;$('home').innerHTML='';
+hint('Toque para soltar a onda<br>ou use um item ↓');tray();hud()}
+function hint(t){$('hint').innerHTML=t||'';$('hint').style.display=t?'block':'none'}
+function tray(){const t=$('tray');t.style.display=tapped?'none':'flex';
+t.innerHTML=Object.entries(ITEMS).map(([k,it])=>`<button class="it ${active[k]?'on':save.coins<it.p?'off':''}" data-k=${k}><span class=e>${it.e}</span>${it.n}<span class=p>${active[k]?'ativo ✓':it.p+' ✦'}</span></button>`).join('');
+t.querySelectorAll('button').forEach(b=>b.onclick=()=>buy(b.dataset.k))}
+function buy(k){const it=ITEMS[k];if(active[k]||tapped||save.coins<it.p)return;
+save.coins-=it.p;persist();active[k]=1;
+if(k==='ampla')waveMax*=1.15;if(k==='eco')waveHold+=90;if(k==='toque')taps=2;
+hint(it.n+' ativo · toque para soltar');tray();hud()}
 const $=id=>document.getElementById(id),over=$('over'),fill=$('fill');
 // barra B: mede todos os orbes; o traço é a meta; o que passa dela fica dourado
-function hud(){$('lvl').textContent='Nível '+level;$('bar').style.visibility='visible';
+function hud(){$('lvl').textContent='Nível '+level;$('coins').textContent='✦ '+save.coins;$('bar').style.visibility='visible';
 $('mark').style.left=need/total*100+'%';fill.style.width=popped/total*100+'%';
 fill.classList.toggle('bonus',popped>need);fill.style.setProperty('--g',need/Math.max(popped,1)*100+'%')}
 function boom(px,py,h,isChain,d=0){waves.push({x:px,y:py,r:0,max:waveMax,life:1,h,hold:0,d});chain=Math.max(chain,d);
 for(let i=0;i<14;i++){const a=Math.random()*6.28,s=(1+Math.random()*2)*S;parts.push({x:px,y:py,vx:Math.cos(a)*s,vy:Math.sin(a)*s,l:1,h})}
 if(isChain){note(popped-1);buzz()}}
 addEventListener('pointerdown',e=>{if(!AC)AC=new (window.AudioContext||webkitAudioContext)();
-if(e.target.closest('button'))return;
-if(state==='start'){msg.style.opacity=0;start();return}
-if(!tapped&&state==='play'){tapped=true;boom(e.clientX,e.clientY,200,false);note(0)}});
-function end(){state='end';const win=popped>=need;
-if(win){best=Math.max(best,level+1);try{localStorage.setItem('lucisBest',best)}catch(e){}}
-// estrelas: meta = 1, 50% acima da meta = 2, todos os orbes = 3
-const st=popped>=total?3:popped>=Math.ceil(need*1.5)?2:1;
+if(e.target.closest('button,#tray'))return;
+if(state==='start'){level=save.best;start();return}
+if(state==='play'&&taps>0&&waves.length===0){taps--;tapped=true;hint('');tray();boom(e.clientX,e.clientY,200,false);note(0)}});
+function end(){state='end';const win=popped>=need;hint('');
+let rew='';
+if(win){save.best=Math.max(save.best,level+1);
+// estrelas: ★ meta · ★★ 50% dos orbes · ★★★ 80% dos orbes (sempre acima da estrela anterior)
+const s2=Math.min(total,Math.max(Math.ceil(total*.5),need+1)),s3=Math.min(total,Math.max(Math.ceil(total*.8),s2+1));
+const st=popped>=s3?3:popped>=s2?2:1,prev=save.stars[level]||0,nw=Math.max(0,st-prev),first3=st===3&&prev<3;
+// Lumes só por estrelas novas: repetir fase não rende moeda à toa
+const gain=nw*5+(first3?10:0);save.coins+=gain;save.stars[level]=Math.max(prev,st);
+if(gain)rew=`<div class=rew><b>+${gain} ✦</b><div>${nw} estrela${nw>1?'s':''} nova${nw>1?'s':''} (+${nw*5})${first3?' · primeira ★★★ (+10)':''}</div></div>`;
+var stars=st}
+persist();hud();
 $('card').innerHTML=win?`<div class=k>FASE ${level}</div><div class=h>Completa</div>
-<div class=stars>${'★'.repeat(st)}<span class=off>${'★'.repeat(3-st)}</span></div>
+<div class=stars>${'★'.repeat(stars)}<span class=off>${'★'.repeat(3-stars)}</span></div>
 <div class=stats><div><b>${popped}</b><span>orbes</span></div><div><b class=gold>+${popped-need}</b><span>bônus</span></div><div><b>${chain}</b><span>maior cadeia</span></div></div>
-<button class=btn id=next>Próxima fase →</button><button class=btn2 id=again>↻ Jogar de novo</button>`
+${rew}<button class=btn id=next>Próxima fase →</button><button class=btn2 id=again>↻ Jogar de novo</button>`
 :`<div class=k>FASE ${level}</div><div class=h>Quase lá</div><p class=q>${popped} de ${need} orbes. Respire e tente de novo.</p><button class=btn id=again>↻ Tentar de novo</button>`;
 if(win)$('next').onclick=()=>{level++;start()};
 $('again').onclick=start;
 over.classList.add('on')}
+// tela inicial: continuar de onde parou, saldo de Lumes
+function home(){const b=save.best;$('home').innerHTML=`<button class=btn id=cont>${b>1?'Continuar':'Começar'}<small>Nível ${b}${starSum()?' · ★ '+starSum()+' estrelas':''}</small></button>
+${b>1?'<button class=btn2 id=restart>Recomeçar do nível 1</button>':''}<span class=pill><span class=coin>✦ ${save.coins}</span> Lumes</span>`;
+$('cont').onclick=()=>{level=save.best;start()};if(b>1)$('restart').onclick=()=>{level=1;start()}}
+home();
 function loop(){x.fillStyle='#070a1a';x.fillRect(0,0,W,H);x.globalCompositeOperation='lighter';
 for(const o of orbs){o.x+=o.vx;o.y+=o.vy;if(o.x<0||o.x>W)o.vx*=-1;if(o.y<0||o.y>H)o.vy*=-1;
 const g=x.createRadialGradient(o.x,o.y,0,o.x,o.y,o.r*3);g.addColorStop(0,`hsla(${o.h},90%,70%,.9)`);g.addColorStop(1,`hsla(${o.h},90%,50%,0)`);
@@ -133,7 +176,7 @@ if(w.life>.5)for(let i=orbs.length-1;i>=0;i--){const o=orbs[i];if(Math.hypot(o.x
 waves=waves.filter(w=>w.life>0);
 for(const p of parts){p.x+=p.vx;p.y+=p.vy;p.vx*=.96;p.vy*=.96;p.l-=.02;x.fillStyle=`hsla(${p.h},90%,70%,${p.l})`;x.fillRect(p.x,p.y,2*S,2*S)}
 parts=parts.filter(p=>p.l>0);x.globalCompositeOperation='source-over';
-if(state==='play'&&tapped&&waves.length===0)end();
+if(state==='play'&&tapped&&waves.length===0){if(taps>0&&orbs.length)hint('Segundo Toque · toque de novo');else end()}
 requestAnimationFrame(loop)}loop();
 // só confirma que esta versão está saudável depois que o jogo iniciou sem erro
 if(U){U.notifyAppReady().catch(()=>{});checkUpdate().catch(()=>ver('v'+VERSION+' · sem conexão'))}

@@ -2,6 +2,17 @@
 
 Jogo relaxante de reação em cadeia: toque uma vez, solte uma onda de luz e encadeie os orbes ao som de uma melodia.
 
+## Regras
+
+- **Estrelas:** ★ bater a meta · ★★ 50% dos orbes · ★★★ 80% dos orbes.
+- **Lumes (✦):** +5 por estrela nova em cada fase e +10 na primeira ★★★ da fase. Repetir uma fase só paga as estrelas que ainda não tinha.
+- **Itens** (comprados antes do primeiro toque, valem só naquela fase, gastos mesmo se perder; 1 de cada por fase):
+  - 🌊 Onda Ampla: ondas 15% maiores, 15 ✦
+  - ⏳ Eco Longo: ondas duram +1,5 s, 15 ✦
+  - ✋ Segundo Toque: um toque extra, 30 ✦
+- **Dificuldade** (calibrada por simulação): vitória ~84% no nível 1, ~46% no 10, ~30% no 20, ~20% no 30. Até o 10 a onda encolhe; depois ela fica fixa e só a meta sobe devagar.
+- **Progresso** (nível liberado, estrelas, Lumes) fica salvo no aparelho e sobrevive às atualizações.
+
 ## Estrutura
 
 ```
