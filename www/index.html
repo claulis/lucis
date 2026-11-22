@@ -25,12 +25,17 @@ canvas{display:block}
 .btn:active{transform:scale(.97)}
 .btn2{display:block;width:100%;margin-top:10px;padding:12px 0;border:0;background:none;color:#e8ecffaa;font:15px system-ui,sans-serif}
 #msg{position:fixed;inset:0;padding:var(--st) calc(24px + var(--sr)) var(--sb) calc(24px + var(--sl));display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;pointer-events:none;transition:opacity .6s}
-#upd{position:fixed;left:50%;bottom:calc(24px + var(--sb));transform:translateX(-50%);display:none;padding:12px 22px;border:1px solid #6fb8ff;border-radius:24px;background:#0d1733;color:#e8ecff;font:inherit;font-size:15px}
+#ver{position:fixed;left:0;right:0;bottom:0;padding:8px calc(18px + var(--sr)) calc(10px + var(--sb)) calc(18px + var(--sl));font-size:12px;text-align:center;color:#e8ecff80;pointer-events:none;transition:opacity .6s}
+#ver.hide{opacity:0}
+#vbar{height:3px;margin:6px auto 0;max-width:260px;border-radius:2px;background:#ffffff14;display:none}
+#vfill{width:0;height:100%;border-radius:2px;background:linear-gradient(90deg,#6fb8ff,#c58bff);box-shadow:0 0 6px #8fb8ff;transition:width .3s}
+#upd{position:fixed;left:50%;bottom:calc(52px + var(--sb));transform:translateX(-50%);display:none;padding:12px 22px;border:1px solid #6fb8ff;border-radius:24px;background:#0d1733;color:#e8ecff;font:inherit;font-size:15px}
 #msg h1{font-weight:300;letter-spacing:.3em;font-size:clamp(32px,9vmin,72px);margin:0 0 10px}
 #msg p{opacity:.75;margin:4px;font-size:clamp(15px,2.6vmin,24px)}
 </style></head><body>
 <canvas id="c"></canvas>
 <button id="upd"></button>
+<div id="ver"><span id="vtxt"></span><div id="vbar"><div id="vfill"></div></div></div>
 <div id="hud"><span id="lvl"></span><div id="bar"><div id="fill"></div><i id="mark"></i></div></div>
 <div id="over"><div class="card" id="card"></div></div>
 <div id="msg"><h1>LUCIS</h1><p>Toque uma vez para soltar uma onda de luz.</p><p>Encadeie os orbes e ouça a melodia.</p></div>
@@ -42,23 +47,32 @@ P.StatusBar&&P.StatusBar.hide().catch(()=>{});
 // conteúdo do jogo (zip): baixa, confere SHA-256 e troca de forma atômica pelo capacitor-updater;
 // se a versão nova não chamar notifyAppReady() em 10 s, o plugin volta sozinho para a anterior.
 // mudança nativa (APK): só o instalador do Android pode trocar o app -> mostra o botão "Atualizar".
+const VERSION='__VERSION__'.startsWith('__')?'dev':'__VERSION__';
+const ver=(t,pct)=>{document.getElementById('vtxt').textContent=t;document.getElementById('vbar').style.display=pct==null?'none':'block';if(pct!=null)document.getElementById('vfill').style.width=pct+'%'};
+ver('Lucis v'+VERSION);
 const MANIFEST='https://github.com/claulis/lucis/releases/latest/download/update.json';
 const U=P.CapacitorUpdater;
 const cmp=(a,b)=>{a=a.split('.').map(Number);b=b.split('.').map(Number);for(let i=0;i<3;i++)if((a[i]||0)!==(b[i]||0))return (a[i]||0)-(b[i]||0);return 0};
 async function checkUpdate(){
+  ver('v'+VERSION+' · verificando atualizações…');
   const r=await P.CapacitorHttp.get({url:MANIFEST,headers:{'Cache-Control':'no-cache'}});
-  if(r.status!==200)return;
+  if(r.status!==200){ver('v'+VERSION);return}
   const m=typeof r.data==='string'?JSON.parse(r.data):r.data;
   const builtin=(await U.getBuiltinVersion()).version,cur=(await U.current()).bundle;
   const running=cur.id==='builtin'?builtin:cur.version;
-  if(cmp(m.version,running)<=0)return;
+  ver('v'+running);
+  if(cmp(m.version,running)<=0){ver('v'+running+' · atualizado ✓');return}
   if(cmp(builtin,m.nativeSince)<0){ // APK instalado é velho demais para este conteúdo
     const b=document.getElementById('upd');b.textContent='Atualizar para '+m.version;b.style.display='block';
-    b.onpointerdown=e=>e.stopPropagation();b.onclick=()=>{location.href=m.apk.url};return}
+    b.onpointerdown=e=>e.stopPropagation();b.onclick=()=>{location.href=m.apk.url};ver('v'+running+' · v'+m.version+' disponível (requer instalação)');return}
   const bad=(await U.list()).bundles.some(x=>x.version===m.version&&x.status==='error');
-  if(bad)return; // essa versão já falhou e foi revertida: não tenta de novo
+  if(bad){ver('v'+running);return} // essa versão já falhou e foi revertida: não tenta de novo
+  ver('Baixando v'+m.version+' · será instalada automaticamente',0);
+  const l=U.addListener&&await U.addListener('download',e=>ver('Baixando v'+m.version+' · será instalada automaticamente · '+e.percent+'%',e.percent));
   const nb=await U.download({url:m.web.url,version:m.version,checksum:m.web.sha256});
-  if(state==='start')await U.set({id:nb.id});else await U.next({id:nb.id}); // no meio da partida, aplica na próxima abertura
+  l&&l.remove();
+  if(state==='start'){ver('v'+m.version+' pronta · aplicando…',100);await U.set({id:nb.id})}
+  else{ver('v'+m.version+' será aplicada na próxima abertura');await U.next({id:nb.id})} // no meio da partida, não interrompe
 }
 const buzz=()=>P.Haptics&&P.Haptics.impact({style:'LIGHT'}).catch(()=>{});
 const c=document.getElementById('c'),x=c.getContext('2d'),msg=document.getElementById('msg');
@@ -83,7 +97,7 @@ waveMax=Math.max(52,86-1.8*level)*S;waveHold=Math.max(60,160-5*level); // onda c
 orbs=[];waves=[];popped=0;chain=0;total=n;tapped=false;
 for(let i=0;i<n;i++){const a=Math.random()*6.28,s=.3+Math.random()*.5;
 orbs.push({x:Math.random()*W,y:Math.random()*H,vx:Math.cos(a)*s*S,vy:Math.sin(a)*s*S,r:7*S,h:(level*40+i*25)%360})}
-state='play';over.classList.remove('on');hud()}
+state='play';over.classList.remove('on');document.getElementById('ver').classList.add('hide');hud()}
 const $=id=>document.getElementById(id),over=$('over'),fill=$('fill');
 // barra B: mede todos os orbes; o traço é a meta; o que passa dela fica dourado
 function hud(){$('lvl').textContent='Nível '+level;$('bar').style.visibility='visible';
@@ -122,5 +136,5 @@ parts=parts.filter(p=>p.l>0);x.globalCompositeOperation='source-over';
 if(state==='play'&&tapped&&waves.length===0)end();
 requestAnimationFrame(loop)}loop();
 // só confirma que esta versão está saudável depois que o jogo iniciou sem erro
-if(U){U.notifyAppReady().catch(()=>{});checkUpdate().catch(()=>{})}
+if(U){U.notifyAppReady().catch(()=>{});checkUpdate().catch(()=>ver('v'+VERSION+' · sem conexão'))}
 </script></body></html>

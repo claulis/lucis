@@ -27,6 +27,7 @@ jobs:
         run: |
           if [ "$GITHUB_EVENT_NAME" = release ]; then V="$GITHUB_REF_NAME"; else V="v$(node -p "require('./package.json').version")"; fi
           echo "LUCIS_VERSION=$V" >> "$GITHUB_ENV"
+          sed -i "s/__VERSION__/${V#[vV]}/g" www/index.html  # versão visível no rodapé do jogo
       - run: npx cap sync android
 
       - name: Restaurar keystore
